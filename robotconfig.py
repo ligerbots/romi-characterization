@@ -22,7 +22,7 @@
     "rightMotorsInverted": [False],
     # Encoder edges-per-revolution (*NOT* cycles per revolution!)
     # For the AMT 103-V, use 8192 (2048 * 4)
-    "encoderEPR": 8192,
+    "encoderEPR": 1440,
     # Gearing accounts for the gearing between the encoder and the output shaft
     "gearing": 1,
     # Encoder ports
@@ -37,7 +37,7 @@
     "rightEncoderInverted": False,
     # ** The following is only if you are using a gyro for the DriveTrain test**
     # Gyro type (one of "NavX", "Pigeon", "ADXRS450", "AnalogGyro", or "None")
-    "gyroType": "None",
+    "gyroType": "RomiGyro",
     # Whatever you put into the constructor of your gyro
     # Could be:
     # "SPI.Port.kMXP" (MXP SPI port for NavX or ADXRS450),

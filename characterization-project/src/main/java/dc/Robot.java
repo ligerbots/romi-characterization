@@ -9,44 +9,15 @@ package dc;
 
 import java.util.function.Supplier;
 
-// import com.ctre.phoenix.motorcontrol.can.WPI_TalonSRX;
-// import com.ctre.phoenix.motorcontrol.can.WPI_VictorSPX;
-
-// // WPI_Talon* imports are needed in case a user has a Pigeon on a Talon
-// import com.ctre.phoenix.motorcontrol.FeedbackDevice;
-// import com.ctre.phoenix.motorcontrol.NeutralMode;
-// import com.ctre.phoenix.motorcontrol.can.WPI_TalonSRX;
-// import com.ctre.phoenix.motorcontrol.can.WPI_TalonFX;
-// import com.ctre.phoenix.sensors.PigeonIMU;
-// import com.kauailabs.navx.frc.AHRS;
-// import edu.wpi.first.wpilibj.ADXRS450_Gyro;
-import edu.wpi.first.wpilibj.AnalogGyro;
-import edu.wpi.first.wpilibj.interfaces.Gyro;
-import edu.wpi.first.wpilibj.SerialPort;
-import edu.wpi.first.wpilibj.I2C;
-import edu.wpi.first.wpilibj.SPI;
-
-// import com.revrobotics.CANSparkMax;
-// import com.revrobotics.CANSparkMax.IdleMode;
-// import com.revrobotics.CANSparkMaxLowLevel.MotorType;
-// import com.revrobotics.CANEncoder;
-// import com.revrobotics.EncoderType;
-// import com.revrobotics.AlternateEncoderType;
-
 import edu.wpi.first.networktables.NetworkTableEntry;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.wpilibj.Encoder;
 import edu.wpi.first.wpilibj.Joystick;
-import edu.wpi.first.wpilibj.PWMTalonSRX;
-import edu.wpi.first.wpilibj.PWMVictorSPX;
 import edu.wpi.first.wpilibj.RobotController;
 import edu.wpi.first.wpilibj.Spark;
-import edu.wpi.first.wpilibj.SpeedController;
 import edu.wpi.first.wpilibj.SpeedControllerGroup;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.Timer;
-import edu.wpi.first.wpilibj.Victor;
-import edu.wpi.first.wpilibj.VictorSP;
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
 import edu.wpi.first.wpilibj.livewindow.LiveWindow;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
@@ -57,14 +28,12 @@ import java.util.ArrayList;
 
 public class Robot extends TimedRobot {
 
-  // static private double ENCODER_EDGES_PER_REV = 8192 / 4.;
+  static private int ENCODER_EPR = 5760;
+  static private double ENCODER_EDGES_PER_REV = ENCODER_EPR / 4.;
   // static private int PIDIDX = 0;
-  // static private int ENCODER_EPR = 8192;
-  // static private double GEARING = 1;
-  private static final double kCountsPerRevolution = 1440.0;
-  private static final double kWheelDiameterInch = 2.75591; // 70 mm
-
-  private double encoderConstant = Math.PI * kWheelDiameterInch / kCountsPerRevolution;
+  static private double GEARING = 1;
+  
+  private double encoderConstant = (1 / GEARING) * (1 / ENCODER_EDGES_PER_REV);
 
   Joystick stick;
   DifferentialDrive drive;
@@ -76,12 +45,12 @@ public class Robot extends TimedRobot {
   Supplier<Double> rightEncoderRate;
   Supplier<Double> gyroAngleRadians;
 
+  // Set up the RomiGyro
+  private final RomiGyro gyro = new RomiGyro();
+
   NetworkTableEntry autoSpeedEntry = NetworkTableInstance.getDefault().getEntry("/robot/autospeed");
   NetworkTableEntry telemetryEntry = NetworkTableInstance.getDefault().getEntry("/robot/telemetry");
   NetworkTableEntry rotateEntry = NetworkTableInstance.getDefault().getEntry("/robot/rotate");
-
-  // Set up the RomiGyro
-  private final RomiGyro gyro = new RomiGyro();
 
   String data = "";
   
@@ -107,41 +76,40 @@ public class Robot extends TimedRobot {
     // create new motor and set neutral modes (if needed)
     Spark motor = new Spark(port);
     motor.setInverted(inverted);
-    
+
     // setup encoder if motor isn't a follower
     if (side != Sides.FOLLOWER) {
-    
+
       Encoder encoder;
 
-    switch (side) {
-      // setup encoder and data collecting methods
+      switch (side) {
+        // setup encoder and data collecting methods
 
-      case RIGHT:
-        // set right side methods = encoder methods
+        case RIGHT:
+          // set right side methods = encoder methods
+          encoder = new Encoder(6, 7);
+          encoder.setReverseDirection(false);
+          encoder.setDistancePerPulse(encoderConstant);
+          rightEncoderPosition = encoder::getDistance;
+          rightEncoderRate = encoder::getRate;
+          break;
 
-        encoder = new Encoder(6, 7);
-        encoder.setReverseDirection(false);
+        case LEFT:
+          encoder = new Encoder(4, 5);
+          encoder.setReverseDirection(false);
+          encoder.setDistancePerPulse(encoderConstant);
+          leftEncoderPosition = encoder::getDistance;
+          leftEncoderRate = encoder::getRate;
 
-        encoder.setDistancePerPulse(encoderConstant);
-        rightEncoderPosition = encoder::getDistance;
-        rightEncoderRate = encoder::getRate;
+          break;
 
-        break;
-      case LEFT:
-        encoder = new Encoder(4, 5);
-        encoder.setReverseDirection(false);
-        encoder.setDistancePerPulse(encoderConstant);
-        leftEncoderPosition = encoder::getDistance;
-        leftEncoderRate = encoder::getRate;
-        break;
-        
-      default:
-        // probably do nothing
-        break;
-
+        default:
+          // probably do nothing
+          break;
       }
-    
+
     }
+
     return motor;
   }
 
@@ -167,7 +135,7 @@ public class Robot extends TimedRobot {
 
     // Note that the angle from the NavX and all implementors of WPILib Gyro
     // must be negated because getAngle returns a clockwise positive angle
-    gyroAngleRadians = () -> Math.toRadians(gyro.getAngleZ());
+    gyroAngleRadians = () -> gyro.getRotation2d().getRadians();
 
     // Set the update rate instead of using flush because of a ntcore bug
     // -> probably don't want to do this on a robot in competition
